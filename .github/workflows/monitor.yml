@@ -1,0 +1,45 @@
+name: Monitor The Last Hunt Icebreaker
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/10 * * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Restore cached state
+        id: cache-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: data/state.json
+          key: lasthunt-state-${{ github.run_id }}
+          restore-keys: |
+            lasthunt-state-
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run watcher
+        env:
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+        run: python run.py
+
+      - name: Save cached state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: data/state.json
+          key: lasthunt-state-${{ github.run_id }}

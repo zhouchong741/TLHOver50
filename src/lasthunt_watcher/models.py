@@ -28,11 +28,21 @@ class ProductSnapshot:
 
 
 @dataclass(frozen=True)
-class ProductChange:
-    kind: str
-    product: ProductSnapshot
-    changed_fields: tuple[str, ...]
-    previous: dict[str, object] | None = None
+class CountChange:
+    previous_count: int
+    current_count: int
+
+    @property
+    def delta(self) -> int:
+        return self.current_count - self.previous_count
+
+    @property
+    def abs_delta(self) -> int:
+        return abs(self.delta)
+
+    @property
+    def direction_label(self) -> str:
+        return "增加" if self.delta > 0 else "减少"
 
 
 @dataclass(frozen=True)
@@ -46,4 +56,3 @@ class SearchContext:
 
 def format_price(cents: int) -> str:
     return f"C${cents / 100:.2f}"
-

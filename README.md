@@ -1,6 +1,6 @@
 # The Last Hunt Icebreaker Watcher
 
-一个完整的 Python GitHub 项目：每 10 分钟抓取 The Last Hunt 的 Icebreaker 分类页，筛选折扣率大于等于 50% 的商品，检测新增或价格/折扣变化，并推送到飞书机器人 webhook。
+一个完整的 Python GitHub 项目：每 10 分钟抓取 The Last Hunt 的 Icebreaker 分类页，筛选折扣率大于等于 50% 的商品，生成 GitHub Pages 静态看板，并在商品总数发生变化时推送飞书机器人 webhook。
 
 项目优先使用站点 HTML、`__NEXT_DATA__` 内嵌 JSON 和站点公开搜索 API，不依赖 Playwright。
 
@@ -15,8 +15,10 @@
   - 折扣率
   - 详情页链接
   - 图片链接
-- 只推送“新增商品”或“价格/折扣变化”的商品
-- 使用本地状态文件去重
+- 生成 GitHub Pages 静态页面，直接展示图片、名称、原价、折后价、折扣率和详情页
+- 飞书只在“符合条件的商品总数”发生变化时推送
+- 首次运行只建立基线，不推送飞书
+- 使用本地状态文件保存上次总数和当前产品快照
 - 支持 GitHub Actions `schedule` 和 `workflow_dispatch`
 - 使用 GitHub Secret `FEISHU_WEBHOOK_URL`
 - 支持日志、HTTP 重试、`--dry-run`
@@ -39,6 +41,7 @@
     ├── models.py
     ├── notifier.py
     ├── scraper.py
+    ├── site_builder.py
     └── state.py
 ```
 
@@ -62,6 +65,7 @@ cp .env.example .env
 
 ```env
 FEISHU_WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/your-webhook
+LASTHUNT_PAGES_URL=https://zhouchong741.github.io/TLHOver50/
 ```
 
 ### 3. 试跑但不发送消息
@@ -86,11 +90,13 @@ python run.py --help
 
 - `--dry-run`：只抓取和输出日志，不发送飞书消息，也不写入状态文件
 - `--state-file`：自定义状态文件路径
+- `--site-dir`：静态页面输出目录，默认 `site`
 - `--category-url`：自定义目标分类页 URL
 - `--min-discount`：最低折扣阈值，默认 `50`
 - `--log-level`：日志级别，默认 `INFO`
 - `--log-file`：日志文件路径
 - `--feishu-webhook-url`：命令行覆盖 webhook
+- `--pages-url`：公开页面地址，会写入页面元数据并出现在飞书通知里
 
 ## GitHub Actions
 
@@ -101,15 +107,35 @@ python run.py --help
 - `workflow_dispatch`
 - 每 10 分钟一次：`*/10 * * * *`
 
+工作流会：
+
+- 抓取并生成 `site/index.html` 与 `site/data.json`
+- 上传为 GitHub Pages artifact
+- 自动部署到 GitHub Pages
+- 仅当商品总数变化时发送飞书通知
+
 ### 需要配置的 GitHub Secret
 
 在仓库 Settings -> Secrets and variables -> Actions 中添加：
 
 - `FEISHU_WEBHOOK_URL`
 
+### 需要启用 GitHub Pages
+
+在仓库 Settings -> Pages 中：
+
+- `Build and deployment`
+- `Source` 选择 `GitHub Actions`
+
+如果你的仓库地址是 `https://github.com/zhouchong741/TLHOver50`，默认 Pages 地址通常是：
+
+```text
+https://zhouchong741.github.io/TLHOver50/
+```
+
 ### 状态持久化
 
-GitHub Actions 运行环境是临时的，项目通过 `actions/cache` 持久化 `data/state.json`，避免每次运行都把历史商品当成新商品。
+GitHub Actions 运行环境是临时的，项目通过 `actions/cache` 持久化 `data/state.json`，保存上一次商品总数，确保只有总数变化时才通知。
 
 ## 实现说明
 
@@ -117,7 +143,9 @@ GitHub Actions 运行环境是临时的，项目通过 `actions/cache` 持久化
 - 从首屏数据中提取商品列表、分页总数和搜索请求模板
 - 若存在更多分页，则从站点公开前端 bundle 中提取公开搜索配置，并调用公开搜索 API 拉取剩余页面
 - 通过 `objectID` 做商品主键去重
-- 只有在飞书推送成功后才会落盘更新状态文件，避免“通知失败但状态已前进”导致漏报
+- 每次运行都会重新生成当前商品列表的静态 HTML 和 JSON
+- 飞书只比较当前总数和上一次总数
+- Pages 部署成功后，workflow 会缓存新的状态文件
 
 ## 目标链接
 

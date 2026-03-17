@@ -17,9 +17,11 @@ class AppConfig:
     category_url: str
     min_discount: int
     state_file: Path
+    site_dir: Path
     log_file: Path
     log_level: str
     feishu_webhook_url: str
+    pages_url: str
     dry_run: bool
     timeout_seconds: float
 
@@ -31,4 +33,3 @@ def load_env() -> None:
 def env_or_default(name: str, default: str) -> str:
     value = os.getenv(name)
     return value if value not in (None, "") else default
-

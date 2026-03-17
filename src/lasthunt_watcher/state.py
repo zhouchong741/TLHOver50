@@ -4,77 +4,54 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 
-from .models import ProductChange, ProductSnapshot
+from .models import CountChange, ProductSnapshot
 
 
-STATE_VERSION = 1
+STATE_VERSION = 2
 
 
 def load_state(path: Path) -> dict[str, object]:
     if not path.exists():
-        return {"version": STATE_VERSION, "items": {}}
+        return {"version": STATE_VERSION, "summary": {}, "items": {}}
 
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ValueError(f"Invalid state file format: {path}")
     data.setdefault("version", STATE_VERSION)
+    data.setdefault("summary", {})
     data.setdefault("items", {})
     return data
 
 
-def detect_changes(
+def detect_count_change(
     products: list[ProductSnapshot], state: dict[str, object]
-) -> tuple[list[ProductChange], dict[str, object]]:
-    items = state.get("items", {})
-    if not isinstance(items, dict):
-        raise ValueError("State 'items' must be a mapping.")
-
-    updated_items = dict(items)
-    changes: list[ProductChange] = []
+) -> tuple[CountChange | None, dict[str, object]]:
+    previous_count = _get_previous_count(state)
+    current_items = {}
 
     for product in products:
         record = product.to_state_record()
         record["last_seen_at"] = _utc_now()
-        previous = updated_items.get(product.object_id)
+        current_items[product.object_id] = record
 
-        if previous is None:
-            changes.append(
-                ProductChange(
-                    kind="new",
-                    product=product,
-                    changed_fields=("new",),
-                    previous=None,
-                )
-            )
-            updated_items[product.object_id] = record
-            continue
-
-        changed_fields: list[str] = []
-        if int(previous.get("original_price_cents", -1)) != product.original_price_cents:
-            changed_fields.append("original_price")
-        if int(previous.get("sale_price_cents", -1)) != product.sale_price_cents:
-            changed_fields.append("sale_price")
-        if int(previous.get("discount_percent", -1)) != product.discount_percent:
-            changed_fields.append("discount_percent")
-
-        if changed_fields:
-            changes.append(
-                ProductChange(
-                    kind="updated",
-                    product=product,
-                    changed_fields=tuple(changed_fields),
-                    previous=dict(previous),
-                )
-            )
-
-        updated_items[product.object_id] = record
+    current_count = len(products)
+    count_change = None
+    if previous_count is not None and current_count != previous_count:
+        count_change = CountChange(
+            previous_count=previous_count,
+            current_count=current_count,
+        )
 
     next_state = {
         "version": STATE_VERSION,
         "updated_at": _utc_now(),
-        "items": updated_items,
+        "summary": {
+            "current_count": current_count,
+            "previous_count": previous_count,
+        },
+        "items": current_items,
     }
-    return changes, next_state
+    return count_change, next_state
 
 
 def save_state(path: Path, state: dict[str, object]) -> None:
@@ -88,3 +65,14 @@ def save_state(path: Path, state: dict[str, object]) -> None:
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
+
+def _get_previous_count(state: dict[str, object]) -> int | None:
+    version = int(state.get("version", 0) or 0)
+    if version < STATE_VERSION:
+        return None
+
+    summary = state.get("summary", {})
+    if isinstance(summary, dict) and summary.get("current_count") is not None:
+        return int(summary["current_count"])
+
+    return None

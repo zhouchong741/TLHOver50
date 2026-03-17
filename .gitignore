@@ -4,4 +4,4 @@ __pycache__/
 *.pyc
 logs/
 data/state.json
-
+site/

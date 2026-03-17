@@ -5,7 +5,7 @@ from html import escape
 import json
 from pathlib import Path
 
-from .models import ProductSnapshot, format_price
+from .models import ProductSnapshot
 
 
 def build_site(
@@ -52,13 +52,17 @@ def _render_index_html(payload: dict[str, object]) -> str:
     if not isinstance(products, list):
         raise ValueError("Site payload products must be a list.")
 
-    cards = "\n".join(_render_card(product) for product in products)
-    pages_url = str(payload.get("pages_url") or "")
-    pages_link = (
-        f'<a class="secondary-link" href="{escape(pages_url)}">Open This Page</a>'
-        if pages_url
-        else ""
+    min_discount = int(payload["min_discount"])
+    thresholds = sorted({value for value in (60, 55, min_discount) if value >= min_discount}, reverse=True)
+    tab_buttons = "\n".join(
+        (
+            f'<button class="tab-btn{" active" if threshold == min_discount else ""}" '
+            f'data-threshold="{threshold}">{threshold}%+</button>'
+        )
+        for threshold in thresholds
     )
+    tab_buttons += '\n<button class="tab-btn" data-threshold="all">全部</button>'
+    payload_json = json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -67,16 +71,16 @@ def _render_index_html(payload: dict[str, object]) -> str:
   <title>TLH Over 50 | Icebreaker Deals</title>
   <style>
     :root {{
-      --bg: #f5efe7;
-      --surface: rgba(255, 252, 247, 0.88);
-      --surface-strong: #fffdf8;
-      --ink: #1e1c19;
-      --muted: #666055;
-      --line: rgba(73, 59, 44, 0.14);
-      --accent: #b24324;
-      --accent-soft: #f4d8c8;
-      --success: #1d6a4d;
-      --shadow: 0 24px 80px rgba(67, 41, 16, 0.12);
+      --bg: #f5f5f5;
+      --panel: #ffffff;
+      --panel-alt: #fafafa;
+      --ink: #1f2937;
+      --muted: #6b7280;
+      --line: #e5e7eb;
+      --accent: #ef4444;
+      --accent-deep: #b91c1c;
+      --accent-soft: rgba(239, 68, 68, 0.10);
+      --shadow: 0 10px 30px rgba(17, 24, 39, 0.08);
     }}
 
     * {{
@@ -85,12 +89,9 @@ def _render_index_html(payload: dict[str, object]) -> str:
 
     body {{
       margin: 0;
-      font-family: "Avenir Next", "Helvetica Neue", Helvetica, sans-serif;
+      font-family: Inter, "Avenir Next", "Helvetica Neue", Helvetica, sans-serif;
       color: var(--ink);
-      background:
-        radial-gradient(circle at top left, rgba(178, 67, 36, 0.20), transparent 30%),
-        radial-gradient(circle at top right, rgba(29, 106, 77, 0.16), transparent 28%),
-        linear-gradient(180deg, #f6f0e9 0%, #efe6db 100%);
+      background: var(--bg);
       min-height: 100vh;
     }}
 
@@ -99,90 +100,113 @@ def _render_index_html(payload: dict[str, object]) -> str:
       text-decoration: none;
     }}
 
+    button,
+    input,
+    select {{
+      font: inherit;
+    }}
+
     .shell {{
-      width: min(1240px, calc(100vw - 32px));
+      width: min(1440px, calc(100vw - 24px));
       margin: 0 auto;
-      padding: 32px 0 64px;
+      padding: 14px 0 56px;
     }}
 
-    .hero {{
-      background: var(--surface);
+    .masthead {{
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      margin-bottom: 14px;
+    }}
+
+    .header-card {{
+      background: var(--panel);
       border: 1px solid var(--line);
-      border-radius: 28px;
+      border-radius: 20px;
       box-shadow: var(--shadow);
-      overflow: hidden;
-      position: relative;
-      padding: 36px;
-      backdrop-filter: blur(8px);
+      padding: 18px;
     }}
 
-    .hero::after {{
-      content: "";
-      position: absolute;
-      inset: auto -40px -60px auto;
-      width: 180px;
-      height: 180px;
-      border-radius: 50%;
-      background: linear-gradient(135deg, rgba(178, 67, 36, 0.18), rgba(178, 67, 36, 0));
+    .header-row {{
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      flex-wrap: wrap;
     }}
 
     .eyebrow {{
+      color: var(--muted);
       font-size: 12px;
-      letter-spacing: 0.16em;
+      font-weight: 600;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
-      color: var(--accent);
-      font-weight: 700;
-      margin-bottom: 14px;
     }}
 
     h1 {{
       margin: 0;
-      font-family: Georgia, Cambria, "Times New Roman", serif;
-      font-size: clamp(34px, 4vw, 58px);
-      line-height: 0.95;
-      max-width: 700px;
+      font-size: clamp(24px, 3vw, 34px);
+      line-height: 1.1;
     }}
 
-    .hero-copy {{
-      margin-top: 18px;
+    .subtitle {{
+      margin-top: 6px;
       color: var(--muted);
-      font-size: 16px;
-      line-height: 1.7;
-      max-width: 720px;
+      font-size: 13px;
     }}
 
-    .stats {{
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 14px;
-      margin-top: 28px;
+    .toolbar {{
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
     }}
 
-    .stat {{
-      background: var(--surface-strong);
-      border: 1px solid var(--line);
-      border-radius: 18px;
-      padding: 16px 18px;
-    }}
-
-    .stat-label {{
-      color: var(--muted);
+    .count-pill,
+    .update-pill {{
+      display: inline-flex;
+      align-items: center;
+      min-height: 38px;
+      padding: 0 14px;
+      border-radius: 999px;
       font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }}
-
-    .stat-value {{
-      margin-top: 8px;
-      font-size: 26px;
       font-weight: 700;
+      white-space: nowrap;
+      border: 1px solid var(--line);
+      background: var(--panel-alt);
     }}
 
-    .hero-links {{
+    .update-pill {{
+      color: #ffffff;
+      border-color: transparent;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }}
+
+    .control {{
+      min-height: 38px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: #ffffff;
+      color: var(--ink);
+      padding: 0 12px;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }}
+
+    .control:focus {{
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.10);
+    }}
+
+    .search-input {{
+      min-width: 220px;
+    }}
+
+    .link-row {{
       display: flex;
       flex-wrap: wrap;
       gap: 12px;
-      margin-top: 22px;
+      margin-top: 12px;
     }}
 
     .primary-link,
@@ -190,220 +214,495 @@ def _render_index_html(payload: dict[str, object]) -> str:
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-height: 44px;
+      min-height: 40px;
       padding: 0 16px;
       border-radius: 999px;
       border: 1px solid var(--line);
+      font-size: 13px;
       font-weight: 700;
     }}
 
     .primary-link {{
-      background: var(--ink);
-      color: #fffdf8;
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent-deep) 100%);
+      border-color: transparent;
+      color: #ffffff;
     }}
 
     .secondary-link {{
-      background: rgba(255, 255, 255, 0.55);
+      background: var(--panel-alt);
     }}
 
-    .grid {{
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 18px;
-      margin-top: 24px;
+    .tabs {{
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding: 2px 0 8px;
+      margin-bottom: 14px;
+      scrollbar-width: none;
     }}
 
-    .card {{
-      background: rgba(255, 253, 248, 0.92);
+    .tabs::-webkit-scrollbar {{
+      display: none;
+    }}
+
+    .tab-btn {{
+      min-height: 40px;
+      padding: 0 16px;
+      border-radius: 999px;
       border: 1px solid var(--line);
-      border-radius: 24px;
-      overflow: hidden;
-      box-shadow: 0 14px 36px rgba(58, 43, 24, 0.08);
+      background: #e5e7eb;
+      color: #4b5563;
+      font-weight: 700;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
     }}
 
-    .thumb {{
-      aspect-ratio: 4 / 5;
-      background: linear-gradient(180deg, #f7efe6, #f0e4d6);
+    .tab-btn.active {{
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #ffffff;
+    }}
+
+    .meta-row {{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }}
+
+    .meta-note {{
+      color: var(--muted);
+      font-size: 12px;
+    }}
+
+    .product-grid {{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }}
+
+    .product-card {{
+      background: #ffffff;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 4px 18px rgba(17, 24, 39, 0.06);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }}
+
+    .product-card:hover {{
+      transform: translateY(-3px);
+      box-shadow: 0 12px 28px rgba(17, 24, 39, 0.12);
+    }}
+
+    .product-figure {{
+      position: relative;
+      background: #f3f4f6;
       overflow: hidden;
     }}
 
-    .thumb img {{
+    .product-img {{
       width: 100%;
-      height: 100%;
+      height: 170px;
       object-fit: cover;
       display: block;
     }}
 
-    .card-body {{
-      padding: 18px;
+    .discount-badge {{
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      min-height: 28px;
+      padding: 0 10px;
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent-deep) 100%);
+      color: #ffffff;
+      font-size: 12px;
+      font-weight: 800;
+      box-shadow: 0 4px 15px rgba(239, 68, 68, 0.35);
     }}
 
-    .badge-row {{
+    .product-info {{
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      flex: 1;
+    }}
+
+    .meta-chips {{
       display: flex;
       gap: 8px;
       flex-wrap: wrap;
-      margin-bottom: 12px;
     }}
 
-    .badge {{
+    .meta-chip {{
       display: inline-flex;
       align-items: center;
-      min-height: 28px;
-      padding: 0 10px;
+      min-height: 24px;
+      padding: 0 8px;
       border-radius: 999px;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 700;
-      border: 1px solid transparent;
-    }}
-
-    .badge-discount {{
-      color: var(--accent);
       background: var(--accent-soft);
+      color: var(--accent-deep);
     }}
 
-    .badge-price {{
-      color: var(--success);
-      background: rgba(29, 106, 77, 0.12);
-    }}
-
-    .card-title {{
-      font-size: 18px;
-      line-height: 1.4;
+    .product-name {{
+      font-size: 13px;
+      line-height: 1.45;
       font-weight: 700;
-      min-height: 76px;
+      min-height: 56px;
     }}
 
-    .price-stack {{
-      display: grid;
+    .price-row {{
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
       gap: 8px;
-      margin-top: 16px;
     }}
 
-    .price-line {{
+    .sale-price {{
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--ink);
+    }}
+
+    .original-price {{
+      font-size: 12px;
+      color: var(--muted);
+      text-decoration: line-through;
+    }}
+
+    .detail-grid {{
+      display: grid;
+      gap: 6px;
+      margin-top: auto;
+      padding-top: 2px;
+    }}
+
+    .detail-line {{
       display: flex;
       justify-content: space-between;
       gap: 16px;
       color: var(--muted);
-      font-size: 14px;
+      font-size: 12px;
     }}
 
-    .price-line strong {{
+    .detail-line strong {{
       color: var(--ink);
-      font-size: 16px;
+      font-size: 13px;
     }}
 
-    .card-link {{
-      margin-top: 18px;
+    .product-link {{
+      margin-top: 8px;
       display: inline-flex;
       align-items: center;
       gap: 8px;
       font-weight: 700;
-      color: var(--accent);
+      color: var(--accent-deep);
+      font-size: 13px;
+    }}
+
+    .empty-state {{
+      grid-column: 1 / -1;
+      padding: 42px 16px;
+      background: #ffffff;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      text-align: center;
+      color: var(--muted);
     }}
 
     footer {{
-      margin-top: 24px;
+      margin-top: 18px;
       color: var(--muted);
-      font-size: 13px;
+      font-size: 12px;
       text-align: center;
+    }}
+
+    #back-to-top {{
+      position: fixed;
+      right: 22px;
+      bottom: 22px;
+      width: 46px;
+      height: 46px;
+      border: none;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent-deep) 100%);
+      color: #ffffff;
+      box-shadow: 0 6px 20px rgba(239, 68, 68, 0.35);
+      cursor: pointer;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(10px);
+      transition: opacity 0.25s ease, transform 0.25s ease, visibility 0.25s ease;
+    }}
+
+    #back-to-top.show {{
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+    }}
+
+    @media (min-width: 640px) {{
+      .product-grid {{
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }}
+
+      .product-img {{
+        height: 210px;
+      }}
+    }}
+
+    @media (min-width: 1024px) {{
+      .product-grid {{
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+      }}
+
+      .product-img {{
+        height: 240px;
+      }}
+    }}
+
+    @media (min-width: 1280px) {{
+      .product-grid {{
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+      }}
     }}
 
     @media (max-width: 640px) {{
       .shell {{
-        width: min(100vw - 20px, 1240px);
-        padding-top: 20px;
+        width: min(100vw - 16px, 1440px);
+        padding-top: 8px;
       }}
 
-      .hero {{
-        padding: 24px;
-        border-radius: 22px;
+      .header-card {{
+        padding: 14px;
       }}
 
-      .card-title {{
-        min-height: auto;
+      .toolbar {{
+        align-items: stretch;
+      }}
+
+      .control,
+      .search-input {{
+        width: 100%;
+      }}
+
+      .count-pill,
+      .update-pill {{
+        width: 100%;
+        justify-content: center;
+      }}
+
+      .product-img {{
+        height: 150px;
+      }}
+
+      .product-name {{
+        min-height: 48px;
+        font-size: 12px;
       }}
     }}
   </style>
 </head>
 <body>
   <main class="shell">
-    <section class="hero">
-      <div class="eyebrow">The Last Hunt Monitor</div>
-      <h1>Icebreaker 折扣大于等于 {escape(str(payload["min_discount"]))}% 商品看板</h1>
-      <p class="hero-copy">
-        自动抓取分类页并生成静态看板。当前页面展示满足折扣条件的全部商品，包括图片、名称、原价、折后价、折扣率和详情页链接。
-      </p>
-      <div class="stats">
-        <div class="stat">
-          <div class="stat-label">Product Count</div>
-          <div class="stat-value">{escape(str(payload["product_count"]))}</div>
+    <section class="masthead">
+      <div class="header-card">
+        <div class="header-row">
+          <div>
+            <div class="eyebrow">The Last Hunt Watcher</div>
+            <h1>Icebreaker 折扣商品看板</h1>
+            <div class="subtitle">当前页面展示折扣大于等于 {escape(str(payload["min_discount"]))}% 的商品，样式参考 End70New 的紧凑商品流。</div>
+          </div>
+          <div class="toolbar">
+            <span class="count-pill" id="item-count">加载中...</span>
+            <input class="control search-input" id="search" type="text" placeholder="搜索产品名称...">
+            <select class="control" id="sort-select">
+              <option value="discount_desc">折扣率从高到低</option>
+              <option value="price_asc">折后价从低到高</option>
+              <option value="price_desc">折后价从高到低</option>
+              <option value="name_asc">名称 A-Z</option>
+            </select>
+          </div>
         </div>
-        <div class="stat">
-          <div class="stat-label">Discount Threshold</div>
-          <div class="stat-value">>= {escape(str(payload["min_discount"]))}%</div>
-        </div>
-        <div class="stat">
-          <div class="stat-label">Updated At</div>
-          <div class="stat-value">{escape(str(payload["generated_at"]))}</div>
+        <div class="link-row">
+          <a class="primary-link" href="{escape(str(payload["category_url"]))}" target="_blank" rel="noreferrer">源分类页</a>
+          <a class="secondary-link" href="./data.json" target="_blank" rel="noreferrer">JSON 数据</a>
         </div>
       </div>
-      <div class="hero-links">
-        <a class="primary-link" href="{escape(str(payload["category_url"]))}" target="_blank" rel="noreferrer">Open Source Category</a>
-        <a class="secondary-link" href="./data.json" target="_blank" rel="noreferrer">Open JSON Data</a>
-        {pages_link}
+
+      <div class="tabs" id="discount-tabs">
+        {tab_buttons}
+      </div>
+
+      <div class="meta-row">
+        <span class="update-pill" id="update-time">最后更新: 加载中...</span>
+        <span class="meta-note">支持搜索、阈值筛选和价格排序</span>
       </div>
     </section>
 
-    <section class="grid">
-      {cards}
-    </section>
+    <section class="product-grid" id="product-grid"></section>
 
     <footer>
       Generated by GitHub Actions for TLHOver50.
     </footer>
   </main>
+  <button id="back-to-top" title="回到顶部" aria-label="回到顶部">↑</button>
+  <script id="page-data" type="application/json">{payload_json}</script>
+  <script>
+    const payload = JSON.parse(document.getElementById("page-data").textContent);
+    const allProducts = Array.isArray(payload.products) ? payload.products : [];
+    const grid = document.getElementById("product-grid");
+    const searchInput = document.getElementById("search");
+    const sortSelect = document.getElementById("sort-select");
+    const countLabel = document.getElementById("item-count");
+    const updateTime = document.getElementById("update-time");
+    const tabs = Array.from(document.querySelectorAll(".tab-btn"));
+    const backToTop = document.getElementById("back-to-top");
+    let activeThreshold = tabs.find((button) => button.classList.contains("active"))?.dataset.threshold || "all";
+
+    function escapeHtml(value) {{
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }}
+
+    function formatPrice(cents) {{
+      return `C$${{(Number(cents) / 100).toFixed(2)}}`;
+    }}
+
+    function formatTime(value) {{
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {{
+        return value;
+      }}
+      return date.toLocaleString("zh-CN", {{
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false
+      }});
+    }}
+
+    function renderCard(product) {{
+      const name = escapeHtml(product.name);
+      const detailUrl = escapeHtml(product.detail_url);
+      const imageUrl = escapeHtml(product.image_url);
+      const salePrice = formatPrice(product.sale_price_cents);
+      const originalPrice = formatPrice(product.original_price_cents);
+      return `
+        <article class="product-card">
+          <a class="product-figure" href="${{detailUrl}}" target="_blank" rel="noreferrer">
+            <img class="product-img" src="${{imageUrl}}" alt="${{name}}" loading="lazy" referrerpolicy="no-referrer">
+            <span class="discount-badge">-${{product.discount_percent}}%</span>
+          </a>
+          <div class="product-info">
+            <div class="meta-chips">
+              <span class="meta-chip">折后价 ${{escapeHtml(salePrice)}}</span>
+            </div>
+            <div class="product-name">${{name}}</div>
+            <div class="price-row">
+              <span class="sale-price">${{escapeHtml(salePrice)}}</span>
+              <span class="original-price">${{escapeHtml(originalPrice)}}</span>
+            </div>
+            <div class="detail-grid">
+              <div class="detail-line"><span>原价</span><strong>${{escapeHtml(originalPrice)}}</strong></div>
+              <div class="detail-line"><span>折后价</span><strong>${{escapeHtml(salePrice)}}</strong></div>
+              <div class="detail-line"><span>折扣率</span><strong>${{product.discount_percent}}%</strong></div>
+            </div>
+            <a class="product-link" href="${{detailUrl}}" target="_blank" rel="noreferrer">查看详情</a>
+          </div>
+        </article>
+      `;
+    }}
+
+    function getFilteredProducts() {{
+      const keyword = searchInput.value.trim().toLowerCase();
+      let products = allProducts.filter((product) => {{
+        if (activeThreshold !== "all" && Number(product.discount_percent) < Number(activeThreshold)) {{
+          return false;
+        }}
+        if (!keyword) {{
+          return true;
+        }}
+        return String(product.name).toLowerCase().includes(keyword);
+      }});
+
+      switch (sortSelect.value) {{
+        case "price_asc":
+          products.sort((left, right) => left.sale_price_cents - right.sale_price_cents);
+          break;
+        case "price_desc":
+          products.sort((left, right) => right.sale_price_cents - left.sale_price_cents);
+          break;
+        case "name_asc":
+          products.sort((left, right) => String(left.name).localeCompare(String(right.name)));
+          break;
+        default:
+          products.sort((left, right) => (
+            right.discount_percent - left.discount_percent
+            || left.sale_price_cents - right.sale_price_cents
+            || String(left.name).localeCompare(String(right.name))
+          ));
+      }}
+      return products;
+    }}
+
+    function render() {{
+      const products = getFilteredProducts();
+      countLabel.textContent = `显示 ${{products.length}} / ${{allProducts.length}} 件商品`;
+      if (!products.length) {{
+        grid.innerHTML = '<div class="empty-state">未找到符合当前筛选条件的商品。</div>';
+        return;
+      }}
+      grid.innerHTML = products.map(renderCard).join("");
+    }}
+
+    tabs.forEach((button) => {{
+      button.addEventListener("click", () => {{
+        tabs.forEach((item) => item.classList.remove("active"));
+        button.classList.add("active");
+        activeThreshold = button.dataset.threshold || "all";
+        render();
+      }});
+    }});
+
+    searchInput.addEventListener("input", render);
+    sortSelect.addEventListener("change", render);
+    updateTime.textContent = `最后更新: ${{formatTime(payload.generated_at)}}`;
+
+    window.addEventListener("scroll", () => {{
+      if (window.scrollY > 320) {{
+        backToTop.classList.add("show");
+      }} else {{
+        backToTop.classList.remove("show");
+      }}
+    }});
+
+    backToTop.addEventListener("click", () => {{
+      window.scrollTo({{ top: 0, behavior: "smooth" }});
+    }});
+
+    render();
+  </script>
 </body>
 </html>
 """
-
-
-def _render_card(product: object) -> str:
-    if not isinstance(product, dict):
-        raise ValueError("Product payload must be a mapping.")
-
-    name = escape(str(product["name"]))
-    image_url = escape(str(product["image_url"]))
-    detail_url = escape(str(product["detail_url"]))
-    discount_percent = escape(str(product["discount_percent"]))
-    original_price = format_price(int(product["original_price_cents"]))
-    sale_price = format_price(int(product["sale_price_cents"]))
-
-    return f"""
-      <article class="card">
-        <div class="thumb">
-          <img src="{image_url}" alt="{name}" loading="lazy" referrerpolicy="no-referrer">
-        </div>
-        <div class="card-body">
-          <div class="badge-row">
-            <span class="badge badge-discount">-{discount_percent}%</span>
-            <span class="badge badge-price">{escape(sale_price)}</span>
-          </div>
-          <div class="card-title">{name}</div>
-          <div class="price-stack">
-            <div class="price-line">
-              <span>原价</span>
-              <strong>{escape(original_price)}</strong>
-            </div>
-            <div class="price-line">
-              <span>折后价</span>
-              <strong>{escape(sale_price)}</strong>
-            </div>
-            <div class="price-line">
-              <span>折扣率</span>
-              <strong>{discount_percent}%</strong>
-            </div>
-          </div>
-          <a class="card-link" href="{detail_url}" target="_blank" rel="noreferrer">查看详情</a>
-        </div>
-      </article>
-    """

@@ -22,6 +22,7 @@ class AppConfig:
     log_level: str
     feishu_webhook_url: str
     pages_url: str
+    deployed_at: str
     dry_run: bool
     timeout_seconds: float
 

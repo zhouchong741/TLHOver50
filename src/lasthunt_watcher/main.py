@@ -60,6 +60,11 @@ def parse_args(argv: list[str] | None = None) -> AppConfig:
         help="Public GitHub Pages URL included in notifications and site metadata.",
     )
     parser.add_argument(
+        "--deployed-at",
+        default=env_or_default("LASTHUNT_DEPLOYED_AT", ""),
+        help="Deployment timestamp shown on the generated page.",
+    )
+    parser.add_argument(
         "--timeout-seconds",
         type=float,
         default=30.0,
@@ -81,6 +86,7 @@ def parse_args(argv: list[str] | None = None) -> AppConfig:
         log_level=args.log_level.upper(),
         feishu_webhook_url=args.feishu_webhook_url,
         pages_url=args.pages_url.rstrip("/"),
+        deployed_at=args.deployed_at,
         dry_run=args.dry_run,
         timeout_seconds=args.timeout_seconds,
     )
@@ -125,6 +131,7 @@ def main(argv: list[str] | None = None) -> int:
         category_url=config.category_url,
         min_discount=config.min_discount,
         pages_url=config.pages_url,
+        deployed_at=config.deployed_at,
     )
     state = load_state(config.state_file)
     count_change, next_state = detect_count_change(products, state)

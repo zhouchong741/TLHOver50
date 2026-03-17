@@ -14,9 +14,11 @@ def build_site(
     category_url: str,
     min_discount: int,
     pages_url: str,
+    deployed_at: str,
 ) -> dict[str, object]:
     output_dir.mkdir(parents=True, exist_ok=True)
     generated_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    effective_deployed_at = deployed_at or generated_at
     sorted_products = sorted(
         products,
         key=lambda item: (-item.discount_percent, item.sale_price_cents, item.name.lower()),
@@ -24,6 +26,7 @@ def build_site(
 
     payload = {
         "generated_at": generated_at,
+        "deployed_at": effective_deployed_at,
         "category_url": category_url,
         "min_discount": min_discount,
         "pages_url": pages_url,
@@ -42,6 +45,7 @@ def build_site(
     )
     return {
         "generated_at": generated_at,
+        "deployed_at": effective_deployed_at,
         "site_dir": str(output_dir),
         "product_count": len(sorted_products),
     }
@@ -163,7 +167,8 @@ def _render_index_html(payload: dict[str, object]) -> str:
     }}
 
     .count-pill,
-    .update-pill {{
+    .update-pill,
+    .deploy-pill {{
       display: inline-flex;
       align-items: center;
       min-height: 38px;
@@ -180,6 +185,12 @@ def _render_index_html(payload: dict[str, object]) -> str:
       color: #ffffff;
       border-color: transparent;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }}
+
+    .deploy-pill {{
+      color: #ffffff;
+      border-color: transparent;
+      background: linear-gradient(135deg, #0f766e 0%, #155e75 100%);
     }}
 
     .control {{
@@ -500,7 +511,8 @@ def _render_index_html(payload: dict[str, object]) -> str:
       }}
 
       .count-pill,
-      .update-pill {{
+      .update-pill,
+      .deploy-pill {{
         width: 100%;
         justify-content: center;
       }}
@@ -549,6 +561,7 @@ def _render_index_html(payload: dict[str, object]) -> str:
 
       <div class="meta-row">
         <span class="update-pill" id="update-time">最后更新: 加载中...</span>
+        <span class="deploy-pill" id="deploy-time">部署更新: 加载中...</span>
         <span class="meta-note">支持搜索、阈值筛选和价格排序</span>
       </div>
     </section>
@@ -569,6 +582,7 @@ def _render_index_html(payload: dict[str, object]) -> str:
     const sortSelect = document.getElementById("sort-select");
     const countLabel = document.getElementById("item-count");
     const updateTime = document.getElementById("update-time");
+    const deployTime = document.getElementById("deploy-time");
     const tabs = Array.from(document.querySelectorAll(".tab-btn"));
     const backToTop = document.getElementById("back-to-top");
     let activeThreshold = tabs.find((button) => button.classList.contains("active"))?.dataset.threshold || "all";
@@ -687,7 +701,8 @@ def _render_index_html(payload: dict[str, object]) -> str:
 
     searchInput.addEventListener("input", render);
     sortSelect.addEventListener("change", render);
-    updateTime.textContent = `最后更新: ${{formatTime(payload.generated_at)}}`;
+    updateTime.textContent = `抓取更新时间: ${{formatTime(payload.generated_at)}}`;
+    deployTime.textContent = `部署更新时间: ${{formatTime(payload.deployed_at || payload.generated_at)}}`;
 
     window.addEventListener("scroll", () => {{
       if (window.scrollY > 320) {{

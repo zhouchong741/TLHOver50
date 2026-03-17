@@ -133,19 +133,26 @@ class LastHuntScraper:
         if start == -1:
             raise RuntimeError("Could not locate public Algolia config in app bundle.")
 
-        window = bundle_text[start : start + 2500]
-        quoted = re.findall(r'"([^"]+)"', window)
-        app_id = next((value for value in quoted if re.fullmatch(r"[A-Z0-9]{10}", value)), "")
-        api_key = next((value for value in quoted if re.fullmatch(r"[a-fA-F0-9]{32}", value)), "")
-        proxy_url = next(
-            (
-                value
-                for value in quoted
-                if value.startswith("https://")
-                and ("algolia" in value or "algolianet" in value)
-            ),
-            "",
+        window = bundle_text[start : start + 4000]
+        app_match = re.search(r'"([A-Z0-9]{10})"', window)
+        api_key_match = re.search(r'"([a-fA-F0-9]{32})"', window, re.I)
+        proxy_match = re.search(
+            r'NEXT_PUBLIC_ALGOLIA_PROXY_URL\)\?[^:]+:"(https://[^"]+)"',
+            window,
         )
+        app_id = app_match.group(1) if app_match else ""
+        api_key = api_key_match.group(1) if api_key_match else ""
+        proxy_url = proxy_match.group(1) if proxy_match else ""
+
+        if not app_id or not api_key:
+            fallback = re.search(
+                r'NEXT_PUBLIC_ALGOLIA_PROXY_URL.*?"([A-Z0-9]{10})".*?"([a-fA-F0-9]{32})"',
+                bundle_text,
+                re.I | re.S,
+            )
+            if fallback:
+                app_id = fallback.group(1)
+                api_key = fallback.group(2)
 
         if not app_id or not api_key:
             raise RuntimeError("Could not parse public Algolia credentials from app bundle.")

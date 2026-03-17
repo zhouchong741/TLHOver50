@@ -152,5 +152,5 @@ GitHub Actions 运行环境是临时的，项目通过 `actions/cache` 持久化
 默认监控页面：
 
 ```text
-https://www.thelasthunt.com/c/icebreaker?size_1=S%2CM%2CL&sort=discountDesc
+https://www.thelasthunt.com/c/all?brand_name=icebreaker%2CPatagonia&size_1=S%2CM%2CL&sort=discountDesc
 ```

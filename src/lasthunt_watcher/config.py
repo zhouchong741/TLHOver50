@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 
 DEFAULT_CATEGORY_URL = (
-    "https://www.thelasthunt.com/c/icebreaker?size_1=S%2CM%2CL&sort=discountDesc"
+    "https://www.thelasthunt.com/c/all?brand_name=icebreaker%2CPatagonia&size_1=S%2CM%2CL&sort=discountDesc"
 )
 
 

@@ -619,19 +619,19 @@ def _render_index_html(payload: dict[str, object]) -> str:
       }});
     }}
 
-    function formatTimeUtcMinus8(value) {{
+    function formatTimeUtcPlus8(value) {{
       const date = new Date(value);
       if (Number.isNaN(date.getTime())) {{
         return value;
       }}
-      const shifted = new Date(date.getTime() - (8 * 60 * 60 * 1000));
+      const shifted = new Date(date.getTime() + (8 * 60 * 60 * 1000));
       const year = shifted.getUTCFullYear();
       const month = String(shifted.getUTCMonth() + 1).padStart(2, "0");
       const day = String(shifted.getUTCDate()).padStart(2, "0");
       const hour = String(shifted.getUTCHours()).padStart(2, "0");
       const minute = String(shifted.getUTCMinutes()).padStart(2, "0");
       const second = String(shifted.getUTCSeconds()).padStart(2, "0");
-      return `${{year}}-${{month}}-${{day}} ${{hour}}:${{minute}}:${{second}} UTC-8`;
+      return `${{year}}-${{month}}-${{day}} ${{hour}}:${{minute}}:${{second}} UTC+8`;
     }}
 
     function renderCard(product) {{
@@ -720,7 +720,7 @@ def _render_index_html(payload: dict[str, object]) -> str:
     searchInput.addEventListener("input", render);
     sortSelect.addEventListener("change", render);
     updateTime.textContent = `抓取更新时间: ${{formatTime(payload.generated_at)}}`;
-    deployTime.textContent = `部署更新时间: ${{formatTimeUtcMinus8(payload.deployed_at || payload.generated_at)}}`;
+    deployTime.textContent = `部署更新时间: ${{formatTimeUtcPlus8(payload.deployed_at || payload.generated_at)}}`;
 
     window.addEventListener("scroll", () => {{
       if (window.scrollY > 320) {{

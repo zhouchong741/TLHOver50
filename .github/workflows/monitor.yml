@@ -121,7 +121,7 @@ jobs:
           raw_deploy_time = str(summary["deployed_at"])
           normalized = raw_deploy_time.replace("Z", "+00:00")
           parsed = datetime.fromisoformat(normalized)
-          deploy_time = parsed.astimezone(timezone(timedelta(hours=-8))).strftime("%Y-%m-%d %H:%M:%S UTC-8")
+          deploy_time = parsed.astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S UTC+8")
           url_text = page_url or summary.get("pages_url") or ""
 
           elements = [

@@ -52,7 +52,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: lasthunt-state
-          path: data/
+          path: |
+            data/state.json
+            data/notification.json
           if-no-files-found: error
 
   deploy:
@@ -75,6 +77,13 @@ jobs:
         with:
           name: lasthunt-state
           path: .
+
+      - name: Normalize downloaded data files
+        run: |
+          mkdir -p data
+          if [ -f state.json ] && [ ! -f data/state.json ]; then mv state.json data/state.json; fi
+          if [ -f notification.json ] && [ ! -f data/notification.json ]; then mv notification.json data/notification.json; fi
+          ls -la data
 
       - name: Save cached state
         uses: actions/cache/save@v4

@@ -7,6 +7,8 @@ from pathlib import Path
 
 from .models import ProductSnapshot
 
+PAGE_TITLE = "The Last Hunt Icebreaker + Patagonia 商品看板"
+
 
 def build_site(
     products: list[ProductSnapshot],
@@ -25,6 +27,7 @@ def build_site(
     )
 
     payload = {
+        "title": PAGE_TITLE,
         "generated_at": generated_at,
         "deployed_at": effective_deployed_at,
         "category_url": category_url,
@@ -72,7 +75,7 @@ def _render_index_html(payload: dict[str, object]) -> str:
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TLH Over 50 | Icebreaker Deals</title>
+  <title>TLH Over 50 | Icebreaker + Patagonia Deals</title>
   <style>
     :root {{
       --bg: #f5f5f5;
@@ -535,7 +538,7 @@ def _render_index_html(payload: dict[str, object]) -> str:
         <div class="header-row">
           <div>
             <div class="eyebrow">The Last Hunt Watcher</div>
-            <h1>Icebreaker 折扣商品看板</h1>
+            <h1>Icebreaker + Patagonia 折扣商品看板</h1>
             <div class="subtitle">当前页面展示折扣大于等于 {escape(str(payload["min_discount"]))}% 的商品，样式参考 End70New 的紧凑商品流。</div>
           </div>
           <div class="toolbar">

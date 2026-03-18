@@ -1,9 +1,9 @@
-name: Monitor The Last Hunt Icebreaker
+name: Monitor The Last Hunt Icebreaker + Patagonia
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/30 * * * *"
 
 permissions:
   contents: read
@@ -40,7 +40,6 @@ jobs:
 
       - name: Run watcher
         env:
-          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
           LASTHUNT_PAGES_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
         run: python run.py
 
@@ -82,3 +81,45 @@ jobs:
         with:
           path: data/state.json
           key: lasthunt-state-${{ github.run_id }}
+
+      - name: Send Feishu notification
+        env:
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.request
+          from pathlib import Path
+
+          summary = json.loads(Path("data/notification.json").read_text(encoding="utf-8"))
+          page_url = os.environ.get("PAGE_URL") or summary.get("pages_url") or ""
+          webhook_url = os.environ["FEISHU_WEBHOOK_URL"]
+
+          lines = [
+              f"{summary['title']} 已部署",
+              f"产品总数: {summary['current_count']}",
+              f"变化: {summary['change_label']}",
+          ]
+          if summary.get("previous_count") is not None:
+              lines.append(f"对比: {summary['previous_count']} -> {summary['current_count']}")
+          if page_url:
+              lines.append(f"页面: {page_url}")
+          lines.append(f"来源: {summary['category_url']}")
+          lines.append(f"部署时间: {summary['deployed_at']}")
+
+          payload = json.dumps(
+              {"msg_type": "text", "content": {"text": "\n".join(lines)}},
+              ensure_ascii=False,
+          ).encode("utf-8")
+          request = urllib.request.Request(
+              webhook_url,
+              data=payload,
+              headers={"Content-Type": "application/json; charset=utf-8"},
+              method="POST",
+          )
+          with urllib.request.urlopen(request, timeout=20) as response:
+              body = response.read().decode("utf-8", errors="ignore")
+              print(body)
+          PY

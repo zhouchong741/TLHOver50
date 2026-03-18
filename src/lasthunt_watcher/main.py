@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 from pathlib import Path
 import sys
 
 from .config import AppConfig, DEFAULT_CATEGORY_URL, env_or_default, load_env
-from .notifier import FeishuNotifier
 from .scraper import LastHuntScraper, build_retry_session
-from .site_builder import build_site
+from .site_builder import PAGE_TITLE, build_site
 from .state import detect_count_change, load_state, save_state
 
 
@@ -16,7 +16,7 @@ def parse_args(argv: list[str] | None = None) -> AppConfig:
     load_env()
 
     parser = argparse.ArgumentParser(
-        description="Watch The Last Hunt Icebreaker deals and push changes to Feishu."
+        description="Watch The Last Hunt Icebreaker + Patagonia deals and build a GitHub Pages dashboard."
     )
     parser.add_argument(
         "--category-url",
@@ -50,11 +50,6 @@ def parse_args(argv: list[str] | None = None) -> AppConfig:
         help="Logging level.",
     )
     parser.add_argument(
-        "--feishu-webhook-url",
-        default=env_or_default("FEISHU_WEBHOOK_URL", ""),
-        help="Override Feishu webhook URL.",
-    )
-    parser.add_argument(
         "--pages-url",
         default=env_or_default("LASTHUNT_PAGES_URL", ""),
         help="Public GitHub Pages URL included in notifications and site metadata.",
@@ -84,7 +79,6 @@ def parse_args(argv: list[str] | None = None) -> AppConfig:
         site_dir=Path(args.site_dir),
         log_file=Path(args.log_file),
         log_level=args.log_level.upper(),
-        feishu_webhook_url=args.feishu_webhook_url,
         pages_url=args.pages_url.rstrip("/"),
         deployed_at=args.deployed_at,
         dry_run=args.dry_run,
@@ -152,24 +146,58 @@ def main(argv: list[str] | None = None) -> int:
         site_info["site_dir"],
     )
 
-    notifier = FeishuNotifier(
-        session=session,
-        webhook_url=config.feishu_webhook_url,
-        dry_run=config.dry_run,
-    )
-    if count_change and not config.dry_run and not config.feishu_webhook_url:
-        raise SystemExit("FEISHU_WEBHOOK_URL is required when product count changes.")
-    notifier.send_count_change(
-        change=count_change,
-        current_count=len(products),
-        pages_url=config.pages_url,
-        category_url=config.category_url,
-    )
-
     if config.dry_run:
         logger.info("Dry-run mode enabled, skipping state write.")
         return 0
 
+    _save_notification_summary(
+        path=config.state_file.parent / "notification.json",
+        current_count=len(products),
+        previous_count=previous_count,
+        pages_url=config.pages_url,
+        category_url=config.category_url,
+        generated_at=str(site_info["generated_at"]),
+        deployed_at=str(site_info["deployed_at"]),
+    )
     save_state(config.state_file, next_state)
     logger.info("State saved to %s", config.state_file)
     return 0
+
+
+def _save_notification_summary(
+    path: Path,
+    current_count: int,
+    previous_count: int | None,
+    pages_url: str,
+    category_url: str,
+    generated_at: str,
+    deployed_at: str,
+) -> None:
+    if previous_count is None:
+        change_label = "首次部署"
+        delta = 0
+    else:
+        delta = current_count - previous_count
+        if delta > 0:
+            change_label = f"增加 {delta}"
+        elif delta < 0:
+            change_label = f"减少 {abs(delta)}"
+        else:
+            change_label = "无变化"
+
+    summary = {
+        "title": PAGE_TITLE,
+        "current_count": current_count,
+        "previous_count": previous_count,
+        "delta": delta,
+        "change_label": change_label,
+        "pages_url": pages_url,
+        "category_url": category_url,
+        "generated_at": generated_at,
+        "deployed_at": deployed_at,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )

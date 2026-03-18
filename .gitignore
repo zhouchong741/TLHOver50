@@ -4,4 +4,5 @@ __pycache__/
 *.pyc
 logs/
 data/state.json
+data/notification.json
 site/

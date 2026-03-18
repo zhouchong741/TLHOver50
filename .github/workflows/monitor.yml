@@ -111,6 +111,10 @@ jobs:
           previous_for_display = int(previous_count) if previous_count is not None else 0
           delta = int(summary.get("delta", 0))
 
+          if previous_count is None or delta == 0:
+              print("Product count unchanged or baseline run, skipping Feishu notification.")
+              raise SystemExit(0)
+
           if delta > 0:
               delta_text = f"+{delta}"
           elif delta < 0:

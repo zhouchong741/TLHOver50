@@ -105,21 +105,91 @@ jobs:
           summary = json.loads(Path("data/notification.json").read_text(encoding="utf-8"))
           page_url = os.environ.get("PAGE_URL") or summary.get("pages_url") or ""
           webhook_url = os.environ["FEISHU_WEBHOOK_URL"]
+          previous_count = summary.get("previous_count")
+          current_count = int(summary["current_count"])
+          previous_for_display = int(previous_count) if previous_count is not None else 0
+          delta = int(summary.get("delta", 0))
 
-          lines = [
-              f"{summary['title']} 已部署",
-              f"产品总数: {summary['current_count']}",
-              f"变化: {summary['change_label']}",
+          if delta > 0:
+              delta_text = f"+{delta}"
+          elif delta < 0:
+              delta_text = str(delta)
+          else:
+              delta_text = "0"
+
+          deploy_time = str(summary["deployed_at"]).replace("T", " ").replace("+00:00", " UTC").replace("Z", " UTC")
+          url_text = page_url or summary.get("pages_url") or ""
+
+          elements = [
+              {
+                  "tag": "div",
+                  "text": {
+                      "tag": "lark_md",
+                      "content": f"📊 **产品总数**\n{current_count}（变化: {delta_text}）",
+                  },
+              },
+              {
+                  "tag": "div",
+                  "text": {
+                      "tag": "lark_md",
+                      "content": f"📈 **历史对比**\n{previous_for_display} -> {current_count}",
+                  },
+              },
+              {
+                  "tag": "div",
+                  "text": {
+                      "tag": "lark_md",
+                      "content": f"🕒 **部署时间**\n{deploy_time}",
+                  },
+              },
           ]
-          if summary.get("previous_count") is not None:
-              lines.append(f"对比: {summary['previous_count']} -> {summary['current_count']}")
-          if page_url:
-              lines.append(f"页面: {page_url}")
-          lines.append(f"来源: {summary['category_url']}")
-          lines.append(f"部署时间: {summary['deployed_at']}")
+
+          if url_text:
+              elements.append(
+                  {
+                      "tag": "div",
+                      "text": {
+                          "tag": "lark_md",
+                          "content": f"🔗 **页面网址**\n[{url_text}]({url_text})",
+                      },
+                  }
+              )
+
+          elements.append(
+              {
+                  "tag": "action",
+                  "actions": [
+                      {
+                          "tag": "button",
+                          "text": {
+                              "tag": "plain_text",
+                              "content": "📱 打开页面",
+                          },
+                          "type": "primary",
+                          "url": url_text or summary.get("category_url") or "",
+                      }
+                  ],
+              }
+          )
 
           payload = json.dumps(
-              {"msg_type": "text", "content": {"text": "\n".join(lines)}},
+              {
+                  "msg_type": "interactive",
+                  "card": {
+                      "config": {
+                          "wide_screen_mode": True,
+                          "enable_forward": True,
+                      },
+                      "header": {
+                          "template": "blue",
+                          "title": {
+                              "tag": "plain_text",
+                              "content": "🛍️ The Last Hunt Icebreaker + Patagonia 产品更新",
+                          },
+                      },
+                      "elements": elements,
+                  },
+              },
               ensure_ascii=False,
           ).encode("utf-8")
           request = urllib.request.Request(
